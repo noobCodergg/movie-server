@@ -354,6 +354,12 @@ exports.getSuggestions = async (req, res) => {
   try {
     const { userId } = req.params;
 
+    // user data আনো
+    const user = await userModel.findById(userId).lean();
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
     const suggestDoc = await suggestModel.findOne({ userId });
     if (!suggestDoc || !suggestDoc.genre || suggestDoc.genre.length === 0) {
       return res.status(404).json({ message: "Not enough data to generate suggestions" });
@@ -374,17 +380,22 @@ exports.getSuggestions = async (req, res) => {
     let suggestions = [];
     const movieIds = new Set();
 
-    // প্রতিটা genre থেকে সব matching movies আনো (non-empty genre)
+    // favourite movie Ids set বানাও (string এ convert করে)
+    const favouriteSet = new Set(user.favourite.map((id) => id.toString()));
+
+    // প্রতিটা genre থেকে সব matching movies আনো (non-empty genre + upcoming বাদ)
     for (let genre of topGenres) {
       const movies = await movieModel.find({
-        genre: { $in: [genre], $exists: true, $ne: [] }
+        genre: { $in: [genre], $exists: true, $ne: [] },
+        upcoming: { $ne: "yes" }   // upcoming বাদ দিলাম এখানে
       });
 
-      // প্রতিটা movie check করে unique রাখি
+      // প্রতিটা movie check করে unique রাখি এবং favourite বাদ দেই
       for (let movie of movies) {
-        if (!movieIds.has(movie._id.toString())) {
+        const movieId = movie._id.toString();
+        if (!movieIds.has(movieId) && !favouriteSet.has(movieId)) {
           suggestions.push(movie);
-          movieIds.add(movie._id.toString());
+          movieIds.add(movieId);
         }
       }
     }
@@ -411,6 +422,7 @@ exports.getSuggestions = async (req, res) => {
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
+
 
 
 
